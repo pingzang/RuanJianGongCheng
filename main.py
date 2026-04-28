@@ -168,18 +168,20 @@ class card_func(QMainWindow, Ui_getcard):
 
         print('玛娜不足，请重置抽卡次数或者更换卡池文件内容')
 
+
     # 执行抽卡功能
     def gachicard(self):
         if self.label_2.text() == '0':
             self.lack_mana()
-        # 进行抽选
         else:
             # self.player2.stop()
             global video_status
             video_status = 0
             self.radioButton.setChecked(False)
-            # 得到抽到的目录 得到图片数组位置
+            
+            # 抽卡逻辑：20抽保底出金
             self.picdir, self.initpic = npor.gachi_card_out(self.pic, self.count_pic)
+            
             # 将图片输出到新窗口
             self.Dialogue.show()
             self.Dialogue.show_card(self.picdir)
