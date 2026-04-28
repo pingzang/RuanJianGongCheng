@@ -246,6 +246,23 @@ class Ui_getcard(object):
         self.pushButton_5.setIcon(icon4)
         self.pushButton_5.setObjectName("pushButton_5")
         self.horizontalLayout.addWidget(self.pushButton_5)
+        self.pushButton_6 = QtWidgets.QPushButton(self.centralwidget)
+        self.pushButton_6.setMinimumSize(QtCore.QSize(110, 30))
+        self.pushButton_6.setMaximumSize(QtCore.QSize(110, 40))
+        font = QtGui.QFont()
+        font.setFamily("字魂蜜桃猫体")
+        font.setPointSize(11)
+        self.pushButton_6.setFont(font)
+        self.pushButton_6.setStyleSheet("QPushButton {\n"
+        "border-image: none;\n"
+        "    color:#ff9292;\n"
+        "    background-color: #ffffff;\n"
+        "    border: 2px solid #ff9292;\n"
+        "border-radius: 10px;\n"
+        "}    \n"
+        "")
+        self.pushButton_6.setObjectName("pushButton_6")
+        self.horizontalLayout.addWidget(self.pushButton_6)
         spacerItem5 = QtWidgets.QSpacerItem(30, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.horizontalLayout.addItem(spacerItem5)
         self.pushButton_2 = QtWidgets.QPushButton(self.centralwidget)
@@ -291,4 +308,5 @@ class Ui_getcard(object):
         self.pushButton_3.setText(_translate("getcard", "查看调试台"))
         self.pushButton_5.setText(_translate("getcard", "更新玛娜"))
         self.pushButton_2.setText(_translate("getcard", "消耗×1抽取"))
+        self.pushButton_6.setText(_translate("getcard", "图鉴"))
 import card
