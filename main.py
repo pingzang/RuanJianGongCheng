@@ -23,6 +23,24 @@ class card_func(QMainWindow):
         self.init_audio()       # 单个音频，循环
         self.init_video()       # 单个视频，循环
         self.init_card_data()   # 抽卡数据
+        # self.musicon = self.radioButton.isChecked()
+        # self.Update1 = Update()
+        # self.Update1.start()
+        # self.Update_s = Update1()
+        # self.Update_s.start()
+        # self.Update1.date1.connect(self.musicplay)
+        # self.videoinit()
+        # self.player.mediaStatusChanged.connect(self.alternativemusic)
+        # self.player1.mediaStatusChanged.connect(self.alternativemusic)
+        # self.pushButton_2.clicked.connect(self.gachicard)
+        # self.pushButton_4.clicked.connect(self.tipit)
+        # self.pushButton_5.clicked.connect(self.update_card)
+        # self.Update_s.date2.connect(self.video_size)
+        # self.pushButton_3.clicked.connect(self.recordit)
+        # ========== 在这里加这一行 ==========
+        self.stats_window = None  # 加在这里！
+        # 👇 新增图鉴按钮 👇
+        self.pushButton_6.clicked.connect(self.open_collection)
 
         # ===================== 按钮绑定 =====================
         self.ui.btn_1.clicked.connect(self.gachicard)        #单抽
@@ -109,6 +127,20 @@ class card_func(QMainWindow):
         self.stats_win.show()
 
     # ===================== 窗口拖拽 =====================
+    
+    # 新增：打开图鉴功能
+    def open_collection(self):
+        from collection_window import CollectionWindow
+    # 如果窗口已经存在，直接刷新再显示，不用重复创建
+        if hasattr(self, 'collect') and self.collect.isVisible():
+                self.collect.refresh_collection()
+                self.collect.raise_()
+        else:
+            self.collect = CollectionWindow()
+            self.collect.show()
+#   以下都是重写功能 主要实现两大功能
+
+#   拖拽功能
     def mousePressEvent(self, e):
         self.drag = True
         self.x = e.x()
