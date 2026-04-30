@@ -14,7 +14,9 @@ from showrecord import record_window
 from PyQt5.QtGui import QCursor
 import cv2
 import operator_tip_use
-
+from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget
+import sys
+from stats_window import StatsWindow  # 导入新增的统计窗口
 
 class card_func(QMainWindow, Ui_getcard):
 
@@ -36,6 +38,8 @@ class card_func(QMainWindow, Ui_getcard):
         self.pushButton_5.clicked.connect(self.update_card)
         self.Update_s.date2.connect(self.video_size)
         self.pushButton_3.clicked.connect(self.recordit)
+        # ========== 在这里加这一行 ==========
+        self.stats_window = None  # 加在这里！
         # 👇 新增图鉴按钮 👇
         self.pushButton_6.clicked.connect(self.open_collection)
 
@@ -83,7 +87,12 @@ class card_func(QMainWindow, Ui_getcard):
         self.readtime = 0
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.init_card()
-
+        # ========== 新增：抽卡统计按钮 ==========
+        self.pushButton_stats = QPushButton("抽卡统计 & 欧非鉴定")
+        self.pushButton_stats.clicked.connect(self.open_stats)
+        
+        # 把按钮加到界面上（你用的是Qt Designer布局，直接这样就能显示）
+        self.verticalLayout.addWidget(self.pushButton_stats)
     # 初始化BGM
     def musicinit(self):
         self.play1 = False
@@ -227,6 +236,11 @@ class card_func(QMainWindow, Ui_getcard):
     def tipit(self):
         self.tip_widget = operator_tip_use.tip_window()
         self.tip_widget.show()
+    # ========== 直接在下面粘贴这段 新增函数 ==========
+    def open_stats(self):
+        self.stats_window = StatsWindow()
+        self.stats_window.show()
+
     
     # 新增：打开图鉴功能
     def open_collection(self):
