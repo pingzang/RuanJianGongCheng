@@ -1,327 +1,147 @@
 # code:utf-8
 from PyQt5.QtWidgets import *
-from PyQt5 import QtGui, QtWidgets
+from PyQt5 import QtGui
 from PyQt5.QtCore import *
-import sys
-from getcard import Ui_getcard
 from PyQt5.QtMultimedia import *
-from PyQt5.QtMultimediaWidgets import QVideoWidget
-import time
+import sys
+from main_ui import MainUI
 import numpy_operator as npor
 import numpy as np
 import card_show
 from showrecord import record_window
-from PyQt5.QtGui import QCursor
 import cv2
-import operator_tip_use
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget
-import sys
-from stats_window import StatsWindow  # 导入新增的统计窗口
+from stats_window import StatsWindow
 
-class card_func(QMainWindow, Ui_getcard):
-
+class card_func(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setupUi(self)
+        self.ui = MainUI()
+        self.setCentralWidget(self.ui)
+
+        # ===================== 初始化 =====================
         self.init_ui()
-        self.musicon = self.radioButton.isChecked()
-        self.Update1 = Update()
-        self.Update1.start()
-        self.Update_s = Update1()
-        self.Update_s.start()
-        self.Update1.date1.connect(self.musicplay)
-        self.videoinit()
-        self.player.mediaStatusChanged.connect(self.alternativemusic)
-        self.player1.mediaStatusChanged.connect(self.alternativemusic)
-        self.pushButton_2.clicked.connect(self.gachicard)
-        self.pushButton_4.clicked.connect(self.tipit)
-        self.pushButton_5.clicked.connect(self.update_card)
-        self.Update_s.date2.connect(self.video_size)
-        self.pushButton_3.clicked.connect(self.recordit)
-        # ========== 在这里加这一行 ==========
-        self.stats_window = None  # 加在这里！
+        self.init_audio()       # 单个音频，循环
+        self.init_video()       # 单个视频，循环
+        self.init_card_data()   # 抽卡数据
 
-    # 设置默认大小
-    def default_size(self):
-        screen = QDesktopWidget().screenGeometry()
-        size = self.geometry()
-        # 关于大小支持 目前仅支持到1920*1080为止 由于本人硬件有限 高分辨率暂时不做支持
-        # 为防止2K、4K高分辨率出现问题 请不要随意拖拽界面
-        if (size.width() < screen.width()) & (size.height() < screen.height()) & \
-                (size.width() <= 1920) & (size.height() <= 1080):
-            self.setGeometry(0, 0, screen.width(), screen.height())
-        elif (size.width() < screen.width()) & (size.height() < screen.height()) & \
-                (size.width() > 1920) & (size.height() > 1080):
-            self.setGeometry(0, 0, 1920, 1080)
+        # ===================== 按钮绑定 =====================
+        self.ui.btn_1.clicked.connect(self.gachicard)        #单抽
+        self.ui.btn_record.clicked.connect(self.recordit)    #抽卡记录
+        self.ui.btn_stats.clicked.connect(self.open_stats)   #抽卡统计
+        self.ui.btn_reset.clicked.connect(self.update_card)  #重置祈愿币/卡池
+        self.ui.music_btn.toggled.connect(self.toggle_music) #音乐开关
 
-    # 初始化开始界面
-    def videoinit(self):
-        global video_status, w1, h1
-        video_status = 1
-        w1 = 719
-        h1 = 400
-        self.Update_v = Update_v()
-        self.Update_v.start()
-        self.Update_v.video2label.connect(self.videoplay)
-
-    # 实时变换视频大小
-    def video_size(self):
-        self.screenfull_w = self.screenfull.geometry().width()
-        self.screenfull_h = self.screenfull.geometry().height()
-        global w1, h1
-        w1 = self.screenfull_w
-        h1 = self.screenfull_h
-
-    # 配置界面
+    # ===================== 窗口初始化 =====================
     def init_ui(self):
-        self.setWindowFlags(Qt.FramelessWindowHint)
-        # screen = QDesktopWidget().screenGeometry()
-        # size = self.geometry()
-        self.default_size()
-        self.pushButton.clicked.connect(self.close)
-        self.pushButton_back.clicked.connect(self.showMinimized)
-        self.musicinit()
-        self.musicinit_re()
-        self.readtime = 0
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.init_card()
-        # ========== 新增：抽卡统计按钮 ==========
-        self.pushButton_stats = QPushButton("抽卡统计 & 欧非鉴定")
-        self.pushButton_stats.clicked.connect(self.open_stats)
-        
-        # 把按钮加到界面上（你用的是Qt Designer布局，直接这样就能显示）
-        self.verticalLayout.addWidget(self.pushButton_stats)
-    # 初始化BGM
-    def musicinit(self):
-        self.play1 = False
-        self.firstplay = True
-        wavefile = QUrl.fromLocalFile('Grand.wav')
-        content = QMediaContent(wavefile)
-        self.player = QMediaPlayer()
-        self.player.setMedia(content)
-        self.player.setVolume(60)
+        self.setWindowFlags(Qt.FramelessWindowHint)         #隐藏窗口栏
+        self.setFixedSize(1000, 600)
+        self.ui.close_btn.clicked.connect(self.close)
+        self.ui.min_btn.clicked.connect(self.showMinimized)
+        self.ui.music_btn.setChecked(True)  # 默认开启音乐
 
-    # 初始化第二段BGM 用于衔接初始BGM 后续仍然重播此段BGM
-    def musicinit_re(self):
-        rewave = QUrl.fromLocalFile('Grand_01.wav')
-        recontent = QMediaContent(rewave)
-        self.player1 = QMediaPlayer()
-        self.player1.setMedia(recontent)
-        self.player1.setVolume(60)
+    # ===================== 单个音频循环播放 =====================
+    def init_audio(self):
+        self.bgm = QMediaPlayer()
+        self.bgm.setMedia(QMediaContent(QUrl.fromLocalFile("bgm.mp3")))
+        self.bgm.setVolume(60)
+        self.bgm.play()  # 启动就播放
 
-    # 读取并按照逻辑播放BGM，如上所示
-    def musicplay(self):
-        self.musicon = self.radioButton.isChecked()
-        if self.firstplay:
-            if self.musicon & (not self.play1):
-                self.player.play()
-                self.play1 = True
-            elif (not self.musicon) & self.play1:
-                self.player.stop()
-                self.player1.stop()
-                self.play1 = False
-                self.firstplay = False
-                print('stop0')
-        elif not self.firstplay:
-            if self.musicon & (not self.play1):
-                self.player1.play()
-                self.play1 = True
-            elif (not self.musicon) & self.play1:
-                self.player.stop()
-                self.player1.stop()
-                self.play1 = False
-                print('stop1')
-
-    # 当音频状态发生反转，记录的值也发生反转
-    def alternativemusic(self):
-        self.readtime += 1
-        if self.play1 & (self.readtime > 3):
-            self.play1 = not self.play1
-            self.firstplay = False
-
-    # 将帧图片显示在label上
-    def videoplay(self, image):
-        self.screenfull.setPixmap(QtGui.QPixmap(image))
-
-    # messagebox 提示玛娜不足
-    def lack_mana(self):
-        self.reply = QMessageBox(QMessageBox.Information, "提示", "\t    -玛娜不足-\n请重置抽卡次数或者更换卡池文件内容")
-        # 添加自定义按钮
-        self.reply.addButton('知道了', QMessageBox.YesRole)
-        self.reply.addButton('也不是不可以啦', QMessageBox.NoRole)
-        self.reply.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
-        self.reply.setStyleSheet("  QPushButton {"
-                                 "  padding: 5px 5px;"
-                                 "  color:#ffffff;"
-                                 "  border: 2px solid #ff9292;"
-                                 "  border-radius: 2px;"
-                                 "  background-color: #ff9292"
-                                 "  }"
-                                 "QLabel{"
-                                 "  font-size: 18px;"
-                                 "  padding: 5px 5px;"
-                                 "  color:#ff9292;"
-                                 "  }"
-                                 )
-        font = QtGui.QFont()
-        font.setFamily("字魂蜜桃猫体")
-        font.setBold(True)
-        font.setWeight(75)
-        self.reply.setFont(font)
-        # icon = QMessageBox.
-        # icon.addPixmap(QtGui.QPixmap(":/image/155.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
-        self.reply.setIcon(0)
-        # 设置消息框中内容前面的图标
-        # self.reply.setIcon(1)
-        self.reply.show()
-
-        print('玛娜不足，请重置抽卡次数或者更换卡池文件内容')
-
-
-    # 执行抽卡功能
-    def gachicard(self):
-        if self.label_2.text() == '0':
-            self.lack_mana()
+    def toggle_music(self):
+        # 勾选播放，取消停止
+        if self.ui.music_btn.isChecked():
+            self.bgm.play()
         else:
-            # self.player2.stop()
-            global video_status
-            video_status = 0
-            self.radioButton.setChecked(False)
-            
-            # 抽卡逻辑：20抽保底出金
-            self.picdir, self.initpic = npor.gachi_card_out(self.pic, self.count_pic)
-            
-            # 将图片输出到新窗口
-            self.Dialogue.show()
-            self.Dialogue.show_card(self.picdir)
+            self.bgm.stop()
 
-    # 保存目前的玛娜数值到本地npy
-    def save_num(self):
-        self.pic = np.delete(self.pic, self.initpic)
-        self.count_pic -= 1
-        self.label_2.setText(str(self.count_pic))
+    # ===================== 单个视频循环 =====================
+    def init_video(self):
+        self.video_thread = VideoThread()
+        self.video_thread.video_signal.connect(self.show_video_frame)
+        self.video_thread.start()
 
-        np.save('picnum1', self.pic)
-        print(self.pic)
-        self.radioButton.setChecked(True)
-        global video_status
-        video_status = 1
-        self.Update_v.start()
-        # self.player2.play()
+    def show_video_frame(self, img):
+        self.ui.center_label.setPixmap(QtGui.QPixmap.fromImage(img))
 
-    # 更新玛娜按钮
-    def update_card(self):
+    # ===================== 抽卡逻辑 =====================
+    def init_card_data(self):
         self.Dialogue = card_show.card_show()
-        # 得到图片数组 得到数组长度
-        self.pic, self.count_pic = npor.renew_num()
-        self.label_2.setText(str(self.count_pic))
-        self.Dialogue.closed.connect(self.save_num)
-
-    # 更新玛娜按钮
-    def init_card(self):
-        self.Dialogue = card_show.card_show()
-        # 得到图片数组 得到数组长度
         self.pic, self.count_pic = npor.read_num()
-        self.label_2.setText(str(self.count_pic))
+        print(f"卡池加载完成：共{len(self.pic)}张卡，当前祈愿币：{self.count_pic}")
+        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
         self.Dialogue.closed.connect(self.save_num)
 
-    # 调试台以及抽卡记录
+    def lack_mana(self):
+        QMessageBox.warning(self, "提示", "祈愿币不足！")
+
+    def gachicard(self):
+        if self.count_pic <= 0:
+            self.lack_mana()
+            return
+        self.picdir, self.initpic = npor.gachi_card_out()
+        if not self.picdir or self.initpic == -1:
+            self.lack_mana()
+            return
+
+        # 3. 更新本地祈愿币变量（同步文件）
+        _, self.count_pic = npor.read_num()
+        self.Dialogue.show()
+        self.Dialogue.show_card(self.picdir)
+
+    def save_num(self):
+        # 同步读取最新祈愿币
+        _, self.count_pic = npor.read_num()
+        # 更新UI显示
+        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
+    def update_card(self):
+        new_mana = npor.reset_mana()
+        # 同步更新UI
+        self.count_pic = new_mana
+        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
+
+    # ===================== 功能窗口 =====================
     def recordit(self):
-        self.record_Widget = record_window()
-        self.record_Widget.show()
-        self.record_Widget.print_record()
+        self.record_win = record_window()
+        self.record_win.show()
+        self.record_win.print_record()
 
-    def tipit(self):
-        self.tip_widget = operator_tip_use.tip_window()
-        self.tip_widget.show()
-    # ========== 直接在下面粘贴这段 新增函数 ==========
     def open_stats(self):
-        self.stats_window = StatsWindow()
-        self.stats_window.show()
+        self.stats_win = StatsWindow()
+        self.stats_win.show()
 
-#   以下都是重写功能 主要实现两大功能
-
-#   拖拽功能
+    # ===================== 窗口拖拽 =====================
     def mousePressEvent(self, e):
-        global video_status
-        video_status = 2
-        self.__dragWin = True
-        self.__dragWin_x = e.x()
-        self.__dragWin_y = e.y()
-        self.setCursor(QCursor(Qt.OpenHandCursor))  # 更改鼠标图标
+        self.drag = True
+        self.x = e.x()
+        self.y = e.y()
 
     def mouseMoveEvent(self, e):
-        # 移动gif题
-        if self.__dragWin == True:
-            pos = e.globalPos()
-            self.move(pos.x() - self.__dragWin_x, pos.y() - self.__dragWin_y)
+        if self.drag:
+            self.move(e.globalPos().x() - self.x, e.globalPos().y() - self.y)
 
     def mouseReleaseEvent(self, e):
-        global video_status
-        video_status = 1
-        self.__dragWin = False
-        self.setCursor(QCursor(Qt.ArrowCursor))
+        self.drag = False
 
-#  多线程 功能 播放02.mp4 修改请改为同名
-class Update(QThread):
-    date1 = pyqtSignal()
-
-    def __init__(self):
-        super(Update, self).__init__()
+# ===================== 视频线程 =====================
+class VideoThread(QThread):
+    video_signal = pyqtSignal(QtGui.QImage)
 
     def run(self):
+        cap = cv2.VideoCapture("01.mp4")
         while True:
-            time.sleep(0.1)
-            self.date1.emit()  # 发射信号
-
-
-# 线程1 实现音频的开关问题
-class Update1(QThread):
-    date2 = pyqtSignal()
-
-    def __init__(self):
-        super(Update1, self).__init__()
-
-    def run(self):
-        while True:
-            time.sleep(0.1)
-            self.date2.emit()  # 发射信号
-
-# 线程1 实现视频播放功能
-class Update_v(QThread):
-    video2label = pyqtSignal(QtGui.QImage)
-
-    def __init__(self):
-        super(Update_v, self).__init__()
-
-    def run(self):
-        cap = cv2.VideoCapture('02.mp4')
-        while True:
-            ret = cap.grab()
-            if video_status == 1:
-                if ret:
-                    ret, frame = cap.retrieve()
-                    rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    h, w, ch = rgbImage.shape
-                    bytesPerLine = ch * w
-                    convertToQtFormat = QtGui.QImage(rgbImage.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-                    if w1 & h1:
-                        convertToQtFormat = convertToQtFormat.scaled(w1, h1)
-                    cv2.waitKey(20)
-                    self.video2label.emit(convertToQtFormat)
-                else:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-            elif video_status == 2:
+            ret, frame = cap.read()
+            if not ret:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                 continue
-            else:
-                cap.release()
-                return
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            h, w, ch = rgb.shape
+            qimg = QtGui.QImage(rgb.data, w, h, ch * w, QtGui.QImage.Format_RGB888)
+            qimg = qimg.scaled(900, 500, Qt.KeepAspectRatio)
+            self.video_signal.emit(qimg)
+            cv2.waitKey(30)
 
-
+# ===================== 启动 =====================
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    mk1 = card_func()
-    mk1.show()
+    win = card_func()
+    win.show()
     sys.exit(app.exec_())
-
