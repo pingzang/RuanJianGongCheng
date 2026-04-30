@@ -40,6 +40,8 @@ class card_func(QMainWindow, Ui_getcard):
         self.pushButton_3.clicked.connect(self.recordit)
         # ========== 在这里加这一行 ==========
         self.stats_window = None  # 加在这里！
+        # 👇 新增图鉴按钮 👇
+        self.pushButton_6.clicked.connect(self.open_collection)
 
     # 设置默认大小
     def default_size(self):
@@ -239,6 +241,17 @@ class card_func(QMainWindow, Ui_getcard):
         self.stats_window = StatsWindow()
         self.stats_window.show()
 
+    
+    # 新增：打开图鉴功能
+    def open_collection(self):
+        from collection_window import CollectionWindow
+    # 如果窗口已经存在，直接刷新再显示，不用重复创建
+        if hasattr(self, 'collect') and self.collect.isVisible():
+                self.collect.refresh_collection()
+                self.collect.raise_()
+        else:
+            self.collect = CollectionWindow()
+            self.collect.show()
 #   以下都是重写功能 主要实现两大功能
 
 #   拖拽功能
