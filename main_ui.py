@@ -77,6 +77,7 @@ class MainUI(QWidget):
 
         self.btn_1 = QPushButton("✨单抽")
         self.btn_record = QPushButton("🎴抽卡记录")
+        self.btn_collection = QPushButton("🔮图鉴")
         self.btn_stats = QPushButton("🍀欧非鉴定")
         self.btn_reset = QPushButton("🔄 重置祈愿币")
 
@@ -89,7 +90,7 @@ class MainUI(QWidget):
                 background:rgba(255,20,100,1);
             }
         """
-        for btn in [self.btn_1, self.btn_record, self.btn_stats, self.btn_reset]:
+        for btn in [self.btn_1, self.btn_record, self.btn_collection, self.btn_stats, self.btn_reset]:
             btn.setStyleSheet(btn_style2)
             bottom_bar.addWidget(btn)
 

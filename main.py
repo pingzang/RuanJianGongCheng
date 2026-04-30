@@ -39,12 +39,11 @@ class card_func(QMainWindow):
         # self.pushButton_3.clicked.connect(self.recordit)
         # ========== 在这里加这一行 ==========
         self.stats_window = None  # 加在这里！
-        # 👇 新增图鉴按钮 👇
-        self.pushButton_6.clicked.connect(self.open_collection)
-
+        
         # ===================== 按钮绑定 =====================
         self.ui.btn_1.clicked.connect(self.gachicard)        #单抽
         self.ui.btn_record.clicked.connect(self.recordit)    #抽卡记录
+        self.ui.btn_collection.clicked.connect(self.open_collection) #图鉴
         self.ui.btn_stats.clicked.connect(self.open_stats)   #抽卡统计
         self.ui.btn_reset.clicked.connect(self.update_card)  #重置祈愿币/卡池
         self.ui.music_btn.toggled.connect(self.toggle_music) #音乐开关
