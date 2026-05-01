@@ -50,11 +50,11 @@ def judge_eu_non(intervals5, intervals4, count5, count4, total_draws):
     # 欧非判定（按真实概率）
     if rate5 >= 12 and rate4 >= 33:
         grade = "大欧皇"
-    elif rate5 >= 10 and rate4 >= 30:
+    elif rate5 >= 10 or rate4 >= 30:
         grade = "小欧皇"
-    elif 7 <= rate5 < 10 and 25 <= rate4 < 30:
+    elif 7 <= rate5 < 10 or 25 <= rate4 < 30:
         grade = "普通人"
-    elif 4 <= rate5 < 7 and 20 <= rate4 < 25:
+    elif 4 <= rate5 < 7 or 20 <= rate4 < 25:
         grade = "小非酋"
     else:
         grade = "大非酋"
