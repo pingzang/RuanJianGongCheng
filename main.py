@@ -14,7 +14,7 @@ from showrecord import record_window
 from PyQt5.QtGui import QCursor
 import cv2
 import operator_tip_use
-
+from sign_ui import SignDialog
 
 class card_func(QMainWindow, Ui_getcard):
 
@@ -37,12 +37,29 @@ class card_func(QMainWindow, Ui_getcard):
         self.Update_s.date2.connect(self.video_size)
         self.pushButton_3.clicked.connect(self.recordit)
 
+        # ✅ 每日签到按钮（正确位置 + 正确样式）
+        self.sign_btn = QPushButton("每日签到", self)
+        self.sign_btn.setFixedSize(120, 40)
+        self.sign_btn.move(30, self.height() - 70)  # 左下角位置
+        self.sign_btn.setStyleSheet("""
+    QPushButton {
+        padding: 5px 5px;
+        color:#ffffff;
+        border: 2px solid #ff9292;
+        border-radius: 2px;
+        background-color: #ff9292;
+        font-size:14px;
+    }
+    QPushButton:hover {
+        background-color: #ff7272;
+    }
+        """)
+        self.sign_btn.clicked.connect(self.open_sign_dialog)
+
     # 设置默认大小
     def default_size(self):
         screen = QDesktopWidget().screenGeometry()
         size = self.geometry()
-        # 关于大小支持 目前仅支持到1920*1080为止 由于本人硬件有限 高分辨率暂时不做支持
-        # 为防止2K、4K高分辨率出现问题 请不要随意拖拽界面
         if (size.width() < screen.width()) & (size.height() < screen.height()) & \
                 (size.width() <= 1920) & (size.height() <= 1080):
             self.setGeometry(0, 0, screen.width(), screen.height())
@@ -71,8 +88,6 @@ class card_func(QMainWindow, Ui_getcard):
     # 配置界面
     def init_ui(self):
         self.setWindowFlags(Qt.FramelessWindowHint)
-        # screen = QDesktopWidget().screenGeometry()
-        # size = self.geometry()
         self.default_size()
         self.pushButton.clicked.connect(self.close)
         self.pushButton_back.clicked.connect(self.showMinimized)
@@ -92,7 +107,7 @@ class card_func(QMainWindow, Ui_getcard):
         self.player.setMedia(content)
         self.player.setVolume(60)
 
-    # 初始化第二段BGM 用于衔接初始BGM 后续仍然重播此段BGM
+    # 初始化第二段BGM
     def musicinit_re(self):
         rewave = QUrl.fromLocalFile('Grand_01.wav')
         recontent = QMediaContent(rewave)
@@ -100,7 +115,7 @@ class card_func(QMainWindow, Ui_getcard):
         self.player1.setMedia(recontent)
         self.player1.setVolume(60)
 
-    # 读取并按照逻辑播放BGM，如上所示
+    # 播放BGM
     def musicplay(self):
         self.musicon = self.radioButton.isChecked()
         if self.firstplay:
@@ -112,7 +127,6 @@ class card_func(QMainWindow, Ui_getcard):
                 self.player1.stop()
                 self.play1 = False
                 self.firstplay = False
-                print('stop0')
         elif not self.firstplay:
             if self.musicon & (not self.play1):
                 self.player1.play()
@@ -121,102 +135,83 @@ class card_func(QMainWindow, Ui_getcard):
                 self.player.stop()
                 self.player1.stop()
                 self.play1 = False
-                print('stop1')
 
-    # 当音频状态发生反转，记录的值也发生反转
+    # 音频切换
     def alternativemusic(self):
         self.readtime += 1
         if self.play1 & (self.readtime > 3):
             self.play1 = not self.play1
             self.firstplay = False
 
-    # 将帧图片显示在label上
+    # 视频帧显示
     def videoplay(self, image):
         self.screenfull.setPixmap(QtGui.QPixmap(image))
 
-    # messagebox 提示玛娜不足
+    # 提示玛娜不足
     def lack_mana(self):
         self.reply = QMessageBox(QMessageBox.Information, "提示", "\t    -玛娜不足-\n请重置抽卡次数或者更换卡池文件内容")
-        # 添加自定义按钮
         self.reply.addButton('知道了', QMessageBox.YesRole)
         self.reply.addButton('也不是不可以啦', QMessageBox.NoRole)
         self.reply.setWindowFlags(Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint | Qt.Tool)
-        self.reply.setStyleSheet("  QPushButton {"
-                                 "  padding: 5px 5px;"
-                                 "  color:#ffffff;"
-                                 "  border: 2px solid #ff9292;"
-                                 "  border-radius: 2px;"
-                                 "  background-color: #ff9292"
-                                 "  }"
-                                 "QLabel{"
-                                 "  font-size: 18px;"
-                                 "  padding: 5px 5px;"
-                                 "  color:#ff9292;"
-                                 "  }"
-                                 )
+        self.reply.setStyleSheet("""
+            QPushButton {
+                padding: 5px 5px;
+                color:#ffffff;
+                border: 2px solid #ff9292;
+                border-radius: 2px;
+                background-color: #ff9292;
+            }
+            QLabel{
+                font-size: 18px;
+                padding: 5px 5px;
+                color:#ff9292;
+            }
+        """)
         font = QtGui.QFont()
         font.setFamily("字魂蜜桃猫体")
         font.setBold(True)
-        font.setWeight(75)
         self.reply.setFont(font)
-        # icon = QMessageBox.
-        # icon.addPixmap(QtGui.QPixmap(":/image/155.jpg"), QtGui.QIcon.Normal, QtGui.QIcon.Off)
         self.reply.setIcon(0)
-        # 设置消息框中内容前面的图标
-        # self.reply.setIcon(1)
         self.reply.show()
 
-        print('玛娜不足，请重置抽卡次数或者更换卡池文件内容')
-
-
-    # 执行抽卡功能
+    # 抽卡功能
     def gachicard(self):
         if self.label_2.text() == '0':
             self.lack_mana()
         else:
-            # self.player2.stop()
             global video_status
             video_status = 0
             self.radioButton.setChecked(False)
-            
-            # 抽卡逻辑：20抽保底出金
             self.picdir, self.initpic = npor.gachi_card_out(self.pic, self.count_pic)
-            
-            # 将图片输出到新窗口
             self.Dialogue.show()
             self.Dialogue.show_card(self.picdir)
 
-    # 保存目前的玛娜数值到本地npy
+    # 保存数值
     def save_num(self):
         self.pic = np.delete(self.pic, self.initpic)
         self.count_pic -= 1
         self.label_2.setText(str(self.count_pic))
-
         np.save('picnum1', self.pic)
-        print(self.pic)
         self.radioButton.setChecked(True)
         global video_status
         video_status = 1
         self.Update_v.start()
-        # self.player2.play()
 
-    # 更新玛娜按钮
+    # 更新卡池
     def update_card(self):
         self.Dialogue = card_show.card_show()
-        # 得到图片数组 得到数组长度
         self.pic, self.count_pic = npor.renew_num()
         self.label_2.setText(str(self.count_pic))
         self.Dialogue.closed.connect(self.save_num)
 
-    # 更新玛娜按钮
+    # 初始化卡池
     def init_card(self):
         self.Dialogue = card_show.card_show()
-        # 得到图片数组 得到数组长度
         self.pic, self.count_pic = npor.read_num()
         self.label_2.setText(str(self.count_pic))
         self.Dialogue.closed.connect(self.save_num)
 
-    # 调试台以及抽卡记录
+    # 抽卡记录
     def recordit(self):
         self.record_Widget = record_window()
         self.record_Widget.show()
@@ -226,19 +221,21 @@ class card_func(QMainWindow, Ui_getcard):
         self.tip_widget = operator_tip_use.tip_window()
         self.tip_widget.show()
 
-#   以下都是重写功能 主要实现两大功能
+    # ✅【修复】签到函数 —— 已经放进类里面了！
+    def open_sign_dialog(self):
+        dialog = SignDialog(self)
+        dialog.exec_()
 
-#   拖拽功能
+    # 拖拽功能
     def mousePressEvent(self, e):
         global video_status
         video_status = 2
         self.__dragWin = True
         self.__dragWin_x = e.x()
         self.__dragWin_y = e.y()
-        self.setCursor(QCursor(Qt.OpenHandCursor))  # 更改鼠标图标
+        self.setCursor(QCursor(Qt.OpenHandCursor))
 
     def mouseMoveEvent(self, e):
-        # 移动gif题
         if self.__dragWin == True:
             pos = e.globalPos()
             self.move(pos.x() - self.__dragWin_x, pos.y() - self.__dragWin_y)
@@ -249,38 +246,29 @@ class card_func(QMainWindow, Ui_getcard):
         self.__dragWin = False
         self.setCursor(QCursor(Qt.ArrowCursor))
 
-#  多线程 功能 播放02.mp4 修改请改为同名
+# 多线程
 class Update(QThread):
     date1 = pyqtSignal()
-
     def __init__(self):
         super(Update, self).__init__()
-
     def run(self):
         while True:
             time.sleep(0.1)
-            self.date1.emit()  # 发射信号
+            self.date1.emit()
 
-
-# 线程1 实现音频的开关问题
 class Update1(QThread):
     date2 = pyqtSignal()
-
     def __init__(self):
         super(Update1, self).__init__()
-
     def run(self):
         while True:
             time.sleep(0.1)
-            self.date2.emit()  # 发射信号
+            self.date2.emit()
 
-# 线程1 实现视频播放功能
 class Update_v(QThread):
     video2label = pyqtSignal(QtGui.QImage)
-
     def __init__(self):
         super(Update_v, self).__init__()
-
     def run(self):
         cap = cv2.VideoCapture('02.mp4')
         while True:
@@ -305,10 +293,8 @@ class Update_v(QThread):
                 cap.release()
                 return
 
-
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     mk1 = card_func()
     mk1.show()
     sys.exit(app.exec_())
-
