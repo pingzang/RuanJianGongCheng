@@ -16,12 +16,14 @@ from PyQt5.QtCore import *
 from PyQt5.QtGui import QCursor
 from stats_window import StatsWindow
 
-# class card_func(QMainWindow, Ui_getcard):
-# from stats_window import StatsWindow
+# 新增：导入登录窗口
+from login_window import LoginWindow
+
 
 class card_func(QMainWindow):
-    def __init__(self):
+    def __init__(self, username=None):          # ← 增加 username 参数
         super().__init__()
+        self.username = username                # ← 保存当前用户名
         self.ui = MainUI()
         self.setCentralWidget(self.ui)
 
@@ -30,17 +32,22 @@ class card_func(QMainWindow):
         self.init_audio()       # 单个音频，循环
         self.init_video()       # 单个视频，循环
         self.init_card_data()   # 抽卡数据
-        # self.pushButton_3.clicked.connect(self.recordit)
-        # ========== 在这里加这一行 ==========
+
         self.stats_window = None  # 加在这里！
-        
+
+        # 如果传入了用户名，可以显示在标题上
+        if self.username:
+            self.setWindowTitle(f"抽卡模拟器 - 当前用户: {self.username}")
+        else:
+            self.setWindowTitle("抽卡模拟器")   # 兼容无用户名的情况
+
         # ===================== 按钮绑定 =====================
-        self.ui.btn_1.clicked.connect(self.gachicard)        #单抽
-        self.ui.btn_record.clicked.connect(self.recordit)    #抽卡记录
-        self.ui.btn_collection.clicked.connect(self.open_collection) #图鉴
-        self.ui.btn_stats.clicked.connect(self.open_stats)   #抽卡统计
-        self.ui.btn_reset.clicked.connect(self.update_card)  #重置祈愿币/卡池
-        self.ui.music_btn.toggled.connect(self.toggle_music) #音乐开关
+        self.ui.btn_1.clicked.connect(self.gachicard)        # 单抽
+        self.ui.btn_record.clicked.connect(self.recordit)    # 抽卡记录
+        self.ui.btn_collection.clicked.connect(self.open_collection) # 图鉴
+        self.ui.btn_stats.clicked.connect(self.open_stats)   # 抽卡统计
+        self.ui.btn_reset.clicked.connect(self.update_card)  # 重置祈愿币/卡池
+        self.ui.music_btn.toggled.connect(self.toggle_music) # 音乐开关
 
         # ✅ 每日签到按钮（正确位置 + 正确样式）
         self.sign_btn = QPushButton("每日签到", self)
@@ -74,7 +81,7 @@ class card_func(QMainWindow):
 
     # ===================== 窗口初始化 =====================
     def init_ui(self):
-        self.setWindowFlags(Qt.FramelessWindowHint)         #隐藏窗口栏
+        self.setWindowFlags(Qt.FramelessWindowHint)         # 隐藏窗口栏
         self.setFixedSize(1000, 600)
         self.ui.close_btn.clicked.connect(self.close)
         self.ui.min_btn.clicked.connect(self.showMinimized)
@@ -133,6 +140,7 @@ class card_func(QMainWindow):
         _, self.count_pic = npor.read_num()
         # 更新UI显示
         self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
+
     def update_card(self):
         new_mana = npor.reset_mana()
         # 同步更新UI
@@ -149,25 +157,22 @@ class card_func(QMainWindow):
         self.stats_win = StatsWindow()
         self.stats_win.show()
 
-    # ✅【修复】签到函数 —— 已经放进类里面了！
+    # ✅ 签到函数 —— 已经放进类里面了
     def open_sign_dialog(self):
         dialog = SignDialog(self)
         dialog.exec_()
-    # ===================== 窗口拖拽 =====================
-    
+
     # 新增：打开图鉴功能
     def open_collection(self):
         from collection_window import CollectionWindow
-    # 如果窗口已经存在，直接刷新再显示，不用重复创建
         if hasattr(self, 'collect') and self.collect.isVisible():
-                self.collect.refresh_collection()
-                self.collect.raise_()
+            self.collect.refresh_collection()
+            self.collect.raise_()
         else:
             self.collect = CollectionWindow()
             self.collect.show()
-#   以下都是重写功能 主要实现两大功能
 
-    # 拖拽功能
+    # ===================== 窗口拖拽 =====================
     def mousePressEvent(self, e):
         self.__dragWin = True
         self.__dragWin_x = e.x()
@@ -184,11 +189,14 @@ class card_func(QMainWindow):
         elif hasattr(self, 'drag') and self.drag:
             self.move(e.globalPos().x() - self.x, e.globalPos().y() - self.y)
 
-# 多线程
+
+# ===================== 多线程 =====================
 class Update(QThread):
     date1 = pyqtSignal()
     def __init__(self):
         super(Update, self).__init__()
+
+
 # ===================== 视频线程 =====================
 class VideoThread(QThread):
     video_signal = pyqtSignal(QtGui.QImage)
@@ -202,12 +210,12 @@ class VideoThread(QThread):
                 h, w, ch = rgb_image.shape
                 bytes_per_line = ch * w
                 qt_image = QtGui.QImage(rgb_image.data, w, h, bytes_per_line, QtGui.QImage.Format_RGB888)
-                # 缩放以适应 label 大小（可选）
                 qt_image = qt_image.scaled(1000, 600, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.video_signal.emit(qt_image)
                 time.sleep(0.033)
             else:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
 
 class Update1(QThread):
     date2 = pyqtSignal()
@@ -217,6 +225,7 @@ class Update1(QThread):
         while True:
             time.sleep(0.1)
             self.date2.emit()
+
 
 class Update_v(QThread):
     video2label = pyqtSignal(QtGui.QImage)
@@ -246,8 +255,18 @@ class Update_v(QThread):
                 cap.release()
                 return
 
+
+# ===================== 程序入口（已加入登录） =====================
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    mk1 = card_func()
-    mk1.show()
-    sys.exit(app.exec_())
+
+    # 1. 弹出登录窗口
+    login = LoginWindow()
+    if login.exec_() == QDialog.Accepted:
+        # 2. 登录成功，传递用户名
+        mk1 = card_func(username=login.current_user)
+        mk1.show()
+        sys.exit(app.exec_())
+    else:
+        # 3. 用户关闭登录窗口，直接退出
+        sys.exit(0)
