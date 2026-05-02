@@ -90,22 +90,24 @@ class record_window(QWidget):
             self.textEdit.append('您的抽卡记录如下（按时间由近到远）：\n')
             receive = np.load('receive_card.npy')
             record_num = len(receive)
-            if record_num > 1:
+            if record_num > 0:
                 for i in range(record_num):
                     self.textEdit.append(str(receive[i]))
             else:
-                self.textEdit.append(str(receive[1]))
+                self.textEdit.append('暂无本地抽卡记录\n')
         else:
             self.textEdit.append('暂无本地抽卡记录\n')
         self.textEdit.append('\n')
-        self.textEdit.append('提示：如果在运行后更换卡池请点击-更新祈愿币-刷新\n')
-        self.textEdit.append('提示：若无法正常播放视频请安装依赖文件夹下的LAV_filters\n')
-        self.textEdit.append('提示：若无法正常显示字体请到文件夹下安装字体\n')
-        self.textEdit.append('提示：为排除本地无文件问题，请到目录下寻找以下文件:\n')
-        self.textEdit.append('02.mp4 Grand.wav Grand_1.wav\n')
-        self.textEdit.append('文件夹pic,video是否为空\n')
-        self.textEdit.append('其中pic对应卡面 video对应背景视频\n')
-        self.textEdit.append('提示：发生闪退、崩溃、卡顿请联系QQ2362003458\n')
+        # self.textEdit.append('提示：如果在运行后更换卡池请点击-更新祈愿币-刷新\n')
+        # self.textEdit.append('提示：若无法正常播放视频请安装依赖文件夹下的LAV_filters\n')
+        # self.textEdit.append('提示：若无法正常显示字体请到文件夹下安装字体\n')
+        # self.textEdit.append('提示：为排除本地无文件问题，请到目录下寻找以下文件:\n')
+        # self.textEdit.append('02.mp4 Grand.wav Grand_1.wav\n')
+        # self.textEdit.append('文件夹pic,video是否为空\n')
+        # self.textEdit.append('其中pic对应卡面 video对应背景视频\n')
+        # self.textEdit.append('提示：发生闪退、崩溃、卡顿请联系QQ2362003458\n')
+        self.textEdit.append('欢迎使用猫meme抽卡模拟器\n')
+        self.textEdit.append('祝您游戏愉快！\n')
 
     def mousePressEvent(self, e):
         self.__dragWin = True

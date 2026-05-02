@@ -6,7 +6,8 @@ def parse_card_records(file_path="receive_card.npy"):
         records = np.load(file_path, allow_pickle=True).tolist()
     except FileNotFoundError:
         print(f"错误：未找到{file_path}文件")
-        return [], [], 0, 0
+        np.save(file_path, np.array([])) # 创建空文件
+        return [], [], 0, 0, 0
 
     # 间隔统计（你要的核心：两个五星之间隔了几抽）
     star5_intervals = []
@@ -41,7 +42,18 @@ def parse_card_records(file_path="receive_card.npy"):
 
 def judge_eu_non(intervals5, intervals4, count5, count4, total_draws):
     if total_draws == 0:
-        return "无数据", {}
+        empty_stats = {
+            "总抽数": 0,
+            "五星数量": 0,
+            "四星数量": 0,
+            "五星真实概率(%)": 0.0,
+            "四星真实概率(%)": 0.0,
+            "五星间隔列表": [],
+            "四星间隔列表": [],
+            "五星平均间隔": "无",
+            "四星平均间隔": "无",
+        }
+        return "无数据", empty_stats
 
     # 真实概率 = 数量 / 总抽数
     rate5 = (count5 / total_draws) * 100 if total_draws > 0 else 0
