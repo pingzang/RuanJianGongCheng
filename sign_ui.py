@@ -1,35 +1,54 @@
 ﻿# code:utf-8
-import json
 from datetime import datetime
 from PyQt5.QtWidgets import (QDialog, QWidget, QVBoxLayout, QGridLayout,
                              QPushButton, QLabel, QMessageBox)
 from PyQt5.QtCore import Qt
-
-SAVE_FILE = "sign_data.json"
-
-def load_sign_data():
-    try:
-        with open(SAVE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except:
-        return {"last_sign_date": "", "week_sign": [False] * 7}
-
-def save_sign_data(data):
-    with open(SAVE_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False)
+from PyQt5.QtGui import QCursor
+import database
 
 class SignDialog(QDialog):
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, username, parent=None):
+        super().__init__()
+        self.username = username
+        self.today = datetime.now()
+        self.today_date = self.today.strftime("%Y-%m-%d")
+        self.today_weekday = self.today.weekday()
+
         self.setWindowTitle("每日签到")
         self.setFixedSize(400, 320)
-        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
 
-        self.sign_data = load_sign_data()
-        self.today = datetime.now()
-        self.today_weekday = self.today.weekday()
         self.init_ui()
+        self.move_to_center()
+        self.refresh_sign_status()
+
+        self.__dragWin = False
+        self.__dragPos = None
+
+    def move_to_center(self):
+        win_w = self.width()
+        win_h = self.height()
+        screen_w = self.screen().availableSize().width()
+        screen_h = self.screen().availableSize().height()
+        x = (screen_w - win_w) // 2
+        y = (screen_h - win_h) // 2
+        self.move(x, y)
+
+    # 拖拽功能
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.__dragWin = True
+            self.__dragPos = event.globalPos() - self.frameGeometry().topLeft()
+            self.setCursor(QCursor(Qt.OpenHandCursor))
+
+    def mouseMoveEvent(self, event):
+        if self.__dragWin and event.buttons() == Qt.LeftButton and self.__dragPos:
+            self.move(event.globalPos() - self.__dragPos)
+
+    def mouseReleaseEvent(self, event):
+        self.__dragWin = False
+        self.setCursor(QCursor(Qt.ArrowCursor))
 
     def init_ui(self):
         self.widget = QWidget(self)
@@ -80,14 +99,8 @@ class SignDialog(QDialog):
             btn.setFixedSize(80, 80)
             btn.setCheckable(True)
             btn.clicked.connect(lambda checked, idx=i: self.sign_click(idx))
-
-            if self.sign_data["week_sign"][i]:
-                btn.setChecked(True)
-            if i == self.today_weekday:
-                btn.setStyleSheet(btn.styleSheet() + "border:2px solid #ff9292;")
-
-            grid.addWidget(btn, i // 4, i % 4)
             self.buttons.append(btn)
+            grid.addWidget(btn, i // 4, i % 4)
 
         layout.addLayout(grid)
 
@@ -109,20 +122,52 @@ class SignDialog(QDialog):
         """)
         layout.addWidget(close_btn)
 
+    def refresh_sign_status(self):
+        try:
+            conn = database.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT last_sign_date FROM sign_in WHERE username=?", (self.username,))
+            row = cursor.fetchone()
+            conn.close()
+
+            for btn in self.buttons:
+                btn.setChecked(False)
+
+            if row and row["last_sign_date"] == self.today_date:
+                self.buttons[self.today_weekday].setChecked(True)
+        except:
+            pass
+
     def sign_click(self, idx):
         if idx != self.today_weekday:
             QMessageBox.warning(self, "提示", "只能签到今天哦!")
             return
-        if self.sign_data["week_sign"][idx]:
-            QMessageBox.information(self, "提示", "你今天已经签到过啦!")
+
+        try:
+            conn = database.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT last_sign_date FROM sign_in WHERE username=?", (self.username,))
+            row = cursor.fetchone()
+
+            if row and row["last_sign_date"] == self.today_date:
+                QMessageBox.information(self, "提示", "你今天已经签到过啦!")
+                conn.close()
+                return
+
+            # 祈愿币 +10
+            cursor.execute("UPDATE users SET coin = coin + 10 WHERE username=?", (self.username,))
+
+            cursor.execute('''
+                INSERT OR REPLACE INTO sign_in (username, last_sign_date)
+                VALUES (?, ?)
+            ''', (self.username, self.today_date))
+
+            conn.commit()
+            conn.close()
+
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"签到失败：{str(e)}")
             return
 
-        self.sign_data["week_sign"][idx] = True
-        self.sign_data["last_sign_date"] = self.today.strftime("%Y-%m-%d")
-        save_sign_data(self.sign_data)
-
         self.buttons[idx].setChecked(True)
-        self.buttons[idx].setStyleSheet("""
-            QPushButton {background-color:#4CAF50;color:white;border-radius:8px;border:none;}
-        """)
-        QMessageBox.information(self, "签到成功", "🎉 恭喜你，签到成功！")
+        QMessageBox.information(self, "签到成功", "🎉 签到成功！获得 10 祈愿币！")
