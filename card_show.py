@@ -1,58 +1,61 @@
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtCore import QUrl
 import cv2
+import os
 
 class card_show(QWidget):
     closed = pyqtSignal()
+    resume_bgm = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setFixedSize(900, 600)
 
-        # 拖拽功能
         self.dragging = False
         self.offset = QPoint()
 
-        # ---------------------- 视频层（全屏，播放时独占窗口） ----------------------
         self.video_label = QLabel(self)
         self.video_label.setScaledContents(True)
         self.video_label.setGeometry(0, 0, 900, 600)
 
-        # ---------------------- 结果界面（默认隐藏，视频播完才显示） ----------------------
         self.result_widget = QWidget(self)
         self.result_widget.setGeometry(0, 0, 900, 600)
         self.result_widget.setVisible(False)
-        self.result_widget.setStyleSheet("background-color: #1a1a2e;")
 
-        # 结果布局
+        self.bg_pixmap = QPixmap("background.jpg")
+        self.result_widget.setStyleSheet("""
+            QWidget {
+                background-color: transparent;
+            }
+        """)
+
         layout = QVBoxLayout(self.result_widget)
         layout.setAlignment(Qt.AlignCenter)
         layout.setSpacing(15)
-        # 调整边距，给顶部和底部留出更多空间
         layout.setContentsMargins(0, 40, 0, 40)
 
-        # 标题：抽卡结果
         self.title_label = QLabel("抽卡结果")
         self.title_label.setStyleSheet("""
             QLabel {
                 color: white;
                 font-size: 24px;
                 font-weight: bold;
+                background: transparent;
             }
         """)
         self.title_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.title_label)
 
-        # 卡片图片显示（调整大小和位置，避免被按钮挡住）
         self.card_label = QLabel()
         self.card_label.setAlignment(Qt.AlignCenter)
-        # 减小卡片高度，确保不会超出按钮上方的区域
         self.card_label.setFixedSize(350, 380)
+        self.card_label.setStyleSheet("background: transparent;")
         layout.addWidget(self.card_label, alignment=Qt.AlignCenter)
 
-        # 关闭按钮（位置靠下，和卡片保持距离）
         self.close_btn = QPushButton("关闭")
         self.close_btn.setStyleSheet("""
             QPushButton {
@@ -69,21 +72,35 @@ class card_show(QWidget):
         self.close_btn.clicked.connect(self.close_all)
         layout.addWidget(self.close_btn, alignment=Qt.AlignCenter)
 
-        # 视频定时器（正常速度）
         self.timer = QTimer()
         self.timer.timeout.connect(self.play_frame)
         self.timer.setInterval(33)
 
-    # ---------------------- 启动：只播放视频 ----------------------
+        # 抽卡音效
+        self.gacha_sound = QMediaPlayer()
+        self.sound_file = "gacha.mp3"
+
+    def paintEvent(self, event):
+        if self.result_widget.isVisible():
+            painter = QPainter(self)
+            painter.drawPixmap(self.rect(), self.bg_pixmap)
+
     def show_card(self, pic_path):
         self.card_path = pic_path
         self.cap = cv2.VideoCapture("02.mp4")
         self.video_label.setVisible(True)
         self.result_widget.setVisible(False)
+
+        # 播放抽卡音效
+        if os.path.exists(self.sound_file):
+            self.gacha_sound.stop()
+            self.gacha_sound.setMedia(QMediaContent(QUrl.fromLocalFile(self.sound_file)))
+            self.gacha_sound.setVolume(70)
+            self.gacha_sound.play()
+
         self.timer.start()
         self.show()
 
-    # ---------------------- 逐帧播放视频（全屏） ----------------------
     def play_frame(self):
         ret, frame = self.cap.read()
         if not ret:
@@ -95,30 +112,25 @@ class card_show(QWidget):
         qimg = QImage(rgb.data, w, h, ch * w, QImage.Format_RGB888)
         self.video_label.setPixmap(QPixmap.fromImage(qimg))
 
-    # ---------------------- 视频结束 → 显示结果界面 ----------------------
     def show_result(self):
         self.timer.stop()
         self.cap.release()
-
-        # 切换界面：隐藏视频，显示结果页
         self.video_label.setVisible(False)
         self.result_widget.setVisible(True)
 
-        # 加载并缩放卡片，匹配新的显示区域大小
-        pix = QPixmap(self.card_path).scaled(
-            350, 380, Qt.KeepAspectRatio, Qt.SmoothTransformation
-        )
+        pix = QPixmap(self.card_path).scaled(350, 380, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         self.card_label.setPixmap(pix)
 
-    # ---------------------- 关闭 ----------------------
     def close_all(self):
         self.timer.stop()
         if hasattr(self, 'cap'):
             self.cap.release()
+
+        self.gacha_sound.stop()
+        self.resume_bgm.emit()
         self.closed.emit()
         self.close()
 
-    # ---------------------- 拖拽 ----------------------
     def mousePressEvent(self, e):
         if e.button() == Qt.LeftButton:
             self.dragging = True

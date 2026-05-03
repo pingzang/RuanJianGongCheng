@@ -6,7 +6,7 @@ class MainUI(QWidget):
     def __init__(self):
         super().__init__()
 
-        # 核心：用 QGridLayout 让所有控件叠加在同一块区域
+        # 用 QGridLayout 让所有控件叠加在同一块区域
         self.setLayout(QGridLayout())
         self.layout().setContentsMargins(0,0,0,0)
 
@@ -20,7 +20,7 @@ class MainUI(QWidget):
         self.overlay.setStyleSheet("background:transparent;")
         self.layout().addWidget(self.overlay, 0, 0)
 
-        # 给悬浮层设置布局
+        # 悬浮层布局
         vbox = QVBoxLayout(self.overlay)
         vbox.setContentsMargins(20, 20, 20, 30)
 
@@ -28,7 +28,7 @@ class MainUI(QWidget):
         top_bar = QHBoxLayout()
 
         # 左：音乐
-        self.music_btn = QCheckBox(" 🎵 BGM")
+        self.music_btn = QCheckBox("🔊 音乐开启")
         self.music_btn.setChecked(True)
         self.music_btn.setStyleSheet("""
             QCheckBox {
@@ -41,8 +41,8 @@ class MainUI(QWidget):
         top_bar.addStretch()
 
         # 右：祈愿币
-        self.mana_label = QLabel("祈愿币：0")
-        self.mana_label.setStyleSheet("""
+        self.coin_label = QLabel("祈愿币：0")
+        self.coin_label.setStyleSheet("""
             QLabel {
                 color:white; font-size:16px; font-weight:bold;
                 background:rgba(255,60,60,0.8);
@@ -66,7 +66,7 @@ class MainUI(QWidget):
         self.min_btn.setStyleSheet(btn_style)
         self.close_btn.setStyleSheet(btn_style)
 
-        top_bar.addWidget(self.mana_label)
+        top_bar.addWidget(self.coin_label)
         top_bar.addWidget(self.min_btn)
         top_bar.addWidget(self.close_btn)
 
@@ -75,11 +75,12 @@ class MainUI(QWidget):
         bottom_bar.setSpacing(14)
         bottom_bar.setAlignment(Qt.AlignCenter)
 
-        self.btn_1 = QPushButton("✨单抽")
-        self.btn_record = QPushButton("🎴抽卡记录")
+        self.btn_1 = QPushButton("✨单次祈愿")
+        self.btn_record = QPushButton("🎴祈愿记录")
         self.btn_collection = QPushButton("🔮图鉴")
-        self.btn_stats = QPushButton("🍀欧非鉴定")
-        self.btn_reset = QPushButton("🔄 重置祈愿币")
+        self.btn_stats = QPushButton("🍀运势解析")
+        self.btn_sign = QPushButton("📅每日签到")
+        self.btn_free_coin = QPushButton("🪙免费领币")
 
         btn_style2 = """
             QPushButton {
@@ -90,7 +91,7 @@ class MainUI(QWidget):
                 background:rgba(255,20,100,1);
             }
         """
-        for btn in [self.btn_1, self.btn_record, self.btn_collection, self.btn_stats, self.btn_reset]:
+        for btn in [self.btn_1, self.btn_record, self.btn_collection, self.btn_stats, self.btn_sign, self.btn_free_coin]:
             btn.setStyleSheet(btn_style2)
             bottom_bar.addWidget(btn)
 

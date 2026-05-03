@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QStackedWidget, QWidget, QMessageBox
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap
 from database import init_db, register_user, login_user
 
 class LoginWindow(QDialog):
@@ -11,10 +11,11 @@ class LoginWindow(QDialog):
         super().__init__()
         self.setWindowTitle("抽卡模拟器 - 登录/注册")
         self.setFixedSize(450, 420)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        
         init_db()
         self.current_user = None
         self.init_ui()
-        # 全局背景
         self.setStyleSheet("""
             QDialog {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
@@ -33,14 +34,25 @@ class LoginWindow(QDialog):
         layout.addWidget(self.stack)
         self.setLayout(layout)
 
-    # ========== 通用样式 ==========
+    # ========== LOGO水平居中 ==========
+    def create_logo_label(self):
+        logo_label = QLabel()
+        pixmap = QPixmap("logo.png")
+        if not pixmap.isNull():
+            logo_label.setPixmap(pixmap.scaled(
+                200, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            ))
+        logo_label.setAlignment(Qt.AlignCenter)
+        return logo_label
+
+    # ========== 标题样式 ==========
     def label_style(self, text, size=18, bold=True):
         label = QLabel(text)
         label.setAlignment(Qt.AlignCenter)
         font = QFont("Microsoft YaHei", size)
         font.setBold(bold)
         label.setFont(font)
-        label.setStyleSheet("color: #333333; margin-top: 10px;")
+        label.setStyleSheet("color: #333333; margin-top:0px;")
         return label
 
     def common_input_style(self):
@@ -78,9 +90,7 @@ class LoginWindow(QDialog):
             }}
         """
 
-    # 简单的颜色变亮/变暗（伪实现，Qt样式表不支持复杂运算，这里直接用相邻色值）
     def lighten_color(self, hex_color):
-        # 仅作示例，返回一个更亮的颜色
         light_map = {"#7b68ee": "#9a8cf0", "#ff7272": "#ff9292", "#ff9292": "#ffb2b2"}
         return light_map.get(hex_color, hex_color)
 
@@ -92,18 +102,18 @@ class LoginWindow(QDialog):
     def create_login_page(self):
         page = QWidget()
         layout = QVBoxLayout()
-        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setContentsMargins(40, 20, 40, 30)
+        layout.setSpacing(5)
 
-        layout.addWidget(self.label_style("🐱 用户登录", 22))
+        layout.addWidget(self.create_logo_label())
+        layout.addWidget(self.label_style("🐱 用户登录", 18))
 
-        layout.addSpacing(15)
         layout.addWidget(QLabel("用户名"))
         self.login_username = QLineEdit()
         self.login_username.setPlaceholderText("请输入用户名")
         self.login_username.setStyleSheet(self.common_input_style())
         layout.addWidget(self.login_username)
 
-        layout.addSpacing(10)
         layout.addWidget(QLabel("密码"))
         self.login_password = QLineEdit()
         self.login_password.setPlaceholderText("请输入密码")
@@ -111,7 +121,6 @@ class LoginWindow(QDialog):
         self.login_password.setStyleSheet(self.common_input_style())
         layout.addWidget(self.login_password)
 
-        layout.addSpacing(20)
         btn_layout = QHBoxLayout()
         login_btn = QPushButton("登录")
         login_btn.setStyleSheet(self.common_btn_style())
@@ -131,10 +140,11 @@ class LoginWindow(QDialog):
     def create_register_page(self):
         page = QWidget()
         layout = QVBoxLayout()
-        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setContentsMargins(40, 20, 40, 30)
+        layout.setSpacing(5)
 
-        layout.addWidget(self.label_style("🐱 用户注册", 22))
-        layout.addSpacing(15)
+        layout.addWidget(self.create_logo_label())
+        layout.addWidget(self.label_style("🐱 用户注册", 18))
 
         layout.addWidget(QLabel("用户名"))
         self.reg_username = QLineEdit()
@@ -142,7 +152,6 @@ class LoginWindow(QDialog):
         self.reg_username.setStyleSheet(self.common_input_style())
         layout.addWidget(self.reg_username)
 
-        layout.addSpacing(10)
         layout.addWidget(QLabel("密码"))
         self.reg_password = QLineEdit()
         self.reg_password.setPlaceholderText("至少6个字符")
@@ -150,7 +159,6 @@ class LoginWindow(QDialog):
         self.reg_password.setStyleSheet(self.common_input_style())
         layout.addWidget(self.reg_password)
 
-        layout.addSpacing(10)
         layout.addWidget(QLabel("确认密码"))
         self.reg_confirm = QLineEdit()
         self.reg_confirm.setPlaceholderText("再次输入密码")
@@ -158,7 +166,6 @@ class LoginWindow(QDialog):
         self.reg_confirm.setStyleSheet(self.common_input_style())
         layout.addWidget(self.reg_confirm)
 
-        layout.addSpacing(20)
         btn_layout = QHBoxLayout()
         register_btn = QPushButton("注册")
         register_btn.setStyleSheet(self.common_btn_style())
@@ -174,7 +181,6 @@ class LoginWindow(QDialog):
         page.setLayout(layout)
         return page
 
-    # ========== 业务逻辑（不变） ==========
     def handle_login(self):
         username = self.login_username.text().strip()
         password = self.login_password.text().strip()

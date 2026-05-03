@@ -3,105 +3,294 @@ from PyQt5.QtWidgets import *
 from PyQt5 import QtGui
 from PyQt5.QtCore import *
 from PyQt5.QtMultimedia import *
+from PyQt5.QtGui import QCursor
+from PyQt5.QtGui import *
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtCore import QUrl
+from PyQt5.QtWidgets import QProgressBar, QLabel
+from datetime import datetime
 import sys
-from main_ui import MainUI
-import numpy_operator as npor
 import numpy as np
+import cv2
+import time
+import sqlite3
+import random
+import os
+from card_pool import CARD_POOL, GACHA_PROB, PITY_GUARANTEE
+from main_ui import MainUI
 import card_show
 from showrecord import record_window
-import cv2
 from sign_ui import SignDialog
-import time
-from PyQt5.QtCore import *
-from PyQt5.QtGui import QCursor
 from stats_window import StatsWindow
-
-# 新增：导入登录窗口
 from login_window import LoginWindow
+from collection_window import CollectionWindow
 
+DB_NAME = "game_data.db"
 
-class card_func(QMainWindow):
-    def __init__(self, username=None):          # ← 增加 username 参数
+# ======================封面动画========================
+class SplashScreen(QWidget):
+    def __init__(self):
         super().__init__()
-        self.username = username                # ← 保存当前用户名
+        self.setWindowFlag(Qt.FramelessWindowHint)
+        self.setFixedSize(1000, 600)
+        self.setStyleSheet("background-color: black;")
+
+        self.label = QLabel(self)
+        self.label.setGeometry(0, 0, 1000, 600)
+        self.label.setScaledContents(True)
+        self.cap = cv2.VideoCapture("game.mp4")
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame)
+        self.timer.start(33)
+
+        self.music_player = QMediaPlayer()
+        self.music_player.setMedia(QMediaContent(QUrl.fromLocalFile("gamebgm.mp3")))
+        self.music_player.setVolume(60)
+        self.music_player.play()
+        self.music_player.mediaStatusChanged.connect(
+            lambda s: self.music_player.play() if s == QMediaPlayer.EndOfMedia else None
+        )
+        self.show()
+
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            return
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame.shape
+        qimg = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
+        self.label.setPixmap(QPixmap.fromImage(qimg))
+
+    def mousePressEvent(self, event):
+        self.close_all()
+
+    def keyPressEvent(self, event):
+        self.close_all()
+
+    def close_all(self):
+        self.timer.stop()
+        self.cap.release()
+        self.music_player.stop()
+        self.close()
+
+# ======================主界面========================
+class card_func(QMainWindow):
+    def __init__(self, username=None):
+        super().__init__()
+        self.username = username
         self.ui = MainUI()
         self.setCentralWidget(self.ui)
 
-        # ===================== 初始化 =====================
+        # 按钮音效
+        self.sound_player = QMediaPlayer()
+        self.button_sound_path = "button.mp3"
+        if not os.path.exists(self.button_sound_path):
+            QMessageBox.warning(self, "提示", "未找到button.mp3音效文件，按钮点击无音效！")
+
+        #初始化
         self.init_ui()
-        self.init_audio()       # 单个音频，循环
-        self.init_video()       # 单个视频，循环
-        self.init_card_data()   # 抽卡数据
+        self.gacha_coin = self.get_user_coin()
+        self.pity = self.get_pity_count()
+        self.music_on = True
+        self.init_video()
 
-        self.stats_window = None  # 加在这里！
+        self.Dialogue = card_show.card_show()
+        self.Dialogue.closed.connect(self.post_gacha)
+        self.Dialogue.showEvent = lambda e: self.pause_bgm() # 抽卡窗口打开时暂停背景音乐
+        self.Dialogue.resume_bgm.connect(self.resume_bgm) # 抽卡窗口关闭时恢复背景音乐
 
-        # 如果传入了用户名，可以显示在标题上
-        if self.username:
-            self.setWindowTitle(f"抽卡模拟器 - 当前用户: {self.username}")
+        self.bgm_player = QMediaPlayer()
+        self.bgm_player.setVolume(40)
+        bgm_url = QUrl.fromLocalFile("bgm.mp3")
+        if not bgm_url.isValid() or not QFile.exists("bgm.mp3"):
+            QMessageBox.warning(self, "提示", "未找到bgm.mp3文件，背景音乐无法播放！")
         else:
-            self.setWindowTitle("抽卡模拟器")   # 兼容无用户名的情况
+            self.bgm_player.setMedia(QMediaContent(bgm_url))
+            self.bgm_player.play()
+        self.bgm_player.mediaStatusChanged.connect(self._loop_bgm)
 
-        # ===================== 按钮绑定 =====================
-        self.ui.btn_1.clicked.connect(self.gachicard)        # 单抽
-        self.ui.btn_record.clicked.connect(self.recordit)    # 抽卡记录
-        self.ui.btn_collection.clicked.connect(self.open_collection) # 图鉴
-        self.ui.btn_stats.clicked.connect(self.open_stats)   # 抽卡统计
-        self.ui.btn_reset.clicked.connect(self.update_card)  # 重置祈愿币/卡池
-        self.ui.music_btn.toggled.connect(self.toggle_music) # 音乐开关
+        self.stats_window = None
+        self.ui.coin_label.setText(f"✨祈愿币：{self.gacha_coin}")
+        self.setWindowTitle("Cat Wisher")
 
-        # ✅ 每日签到按钮（正确位置 + 正确样式）
-        self.sign_btn = QPushButton("每日签到", self)
-        self.sign_btn.setFixedSize(120, 40)
-        self.sign_btn.move(30, self.height() - 70)  # 左下角位置
-        self.sign_btn.setStyleSheet("""
-    QPushButton {
-        padding: 5px 5px;
-        color:#ffffff;
-        border: 2px solid #ff9292;
-        border-radius: 2px;
-        background-color: #ff9292;
-        font-size:14px;
-    }
-    QPushButton:hover {
-        background-color: #ff7272;
-    }
-        """)
-        self.sign_btn.clicked.connect(self.open_sign_dialog)
+        # 按钮功能绑定
+        self.ui.btn_1.clicked.connect(self.gachicard)
+        self.ui.btn_record.clicked.connect(self.recordit)
+        self.ui.btn_collection.clicked.connect(self.open_collection)
+        self.ui.btn_stats.clicked.connect(self.open_stats)
+        self.ui.btn_sign.clicked.connect(self.open_sign_dialog)
+        self.ui.music_btn.toggled.connect(self.switch_music)
+        self.ui.btn_free_coin.clicked.connect(self.open_free_coin_dialog)
 
-    # 设置默认大小
-    def default_size(self):
-        screen = QDesktopWidget().screenGeometry()
-        size = self.geometry()
-        if (size.width() < screen.width()) & (size.height() < screen.height()) & \
-                (size.width() <= 1920) & (size.height() <= 1080):
-            self.setGeometry(0, 0, screen.width(), screen.height())
-        elif (size.width() < screen.width()) & (size.height() < screen.height()) & \
-                (size.width() > 1920) & (size.height() > 1080):
-            self.setGeometry(0, 0, 1920, 1080)
+        # 按钮音效绑定
+        self.ui.btn_1.clicked.connect(self.play_button_sound)
+        self.ui.btn_record.clicked.connect(self.play_button_sound)
+        self.ui.btn_collection.clicked.connect(self.play_button_sound)
+        self.ui.btn_stats.clicked.connect(self.play_button_sound)
+        self.ui.btn_sign.clicked.connect(self.play_button_sound)
+        self.ui.btn_free_coin.clicked.connect(self.play_button_sound)
 
-    # ===================== 窗口初始化 =====================
+        # 顶部用户名+保底文字
+        self.user_label = QLabel(self)
+        self.user_label.setStyleSheet("color: #ffffff; font-size:15px; font-weight: bold;")
+        self.user_label.setText(f"当前用户：{self.username if self.username else '游客'}")
+        self.user_label.adjustSize()
+
+        self.pity_label = QLabel(self)
+        self.pity_label.setStyleSheet("color: gold; font-size:15px;")
+        self.pity_label.adjustSize()
+        
+        self.refresh_pity_ui() # 顶部居中
+    
+    def pause_bgm(self): #暂停背景音乐
+        if self.music_on and self.bgm_player.state() == QMediaPlayer.PlayingState:
+            self.bgm_player.pause()
+
+    def resume_bgm(self): #恢复背景音乐
+        if self.music_on and self.bgm_player.state() == QMediaPlayer.PausedState:
+            self.bgm_player.play()
+
+    def open_free_coin_dialog(self):
+        ok = QMessageBox.question(self, "免费领币", "观看15秒广告获得1枚祈愿币",
+                                QMessageBox.Ok | QMessageBox.Cancel)
+        if ok != QMessageBox.Ok:
+            return
+
+        # 暂停音乐
+        self.old_volume = self.bgm_player.volume()
+        self.bgm_player.setVolume(0)
+
+        self.ad = AdWindow(self)
+        self.ad.ad_finished.connect(self.on_ad_finished)
+        self.ad.show()
+
+    def on_ad_finished(self, success):
+        # 恢复音乐
+        self.bgm_player.setVolume(self.old_volume)
+
+        if success:
+            self.gacha_coin += 1
+            self.update_user_coin(self.gacha_coin)
+            self.ui.coin_label.setText(f"✨祈愿币：{self.gacha_coin}")
+            QMessageBox.information(self, "成功", "恭喜获得1枚祈愿币！")
+        else:
+            QMessageBox.warning(self, "提示", "未完成广告，无法领取奖励")
+
+    # 播放按钮音效方法
+    def play_button_sound(self):
+        """播放按钮点击音效"""
+        if not os.path.exists(self.button_sound_path):
+            return
+        # 每次播放前重置播放器状态，避免音效重叠
+        self.sound_player.stop()
+        sound_url = QUrl.fromLocalFile(self.button_sound_path)
+        self.sound_player.setMedia(QMediaContent(sound_url))
+        self.sound_player.setVolume(50)  #音量
+        self.sound_player.play()
+
+    def refresh_pity_ui(self):
+        from card_pool import PITY_GUARANTEE
+        current = self.pity
+        total = PITY_GUARANTEE
+
+        self.pity_label.setText(f"保底：{current}/{total}")
+        self.user_label.adjustSize()
+        self.pity_label.adjustSize()
+
+        # 顶部水平居中
+        total_width = self.user_label.width() + 18 + self.pity_label.width()
+        start_x = (self.width() - total_width) // 2
+
+        self.user_label.move(start_x, 12)
+        self.pity_label.move(start_x + self.user_label.width() + 18, 12)
+
     def init_ui(self):
-        self.setWindowFlags(Qt.FramelessWindowHint)         # 隐藏窗口栏
+        self.setWindowFlags(Qt.FramelessWindowHint)
         self.setFixedSize(1000, 600)
         self.ui.close_btn.clicked.connect(self.close)
         self.ui.min_btn.clicked.connect(self.showMinimized)
-        self.ui.music_btn.setChecked(True)  # 默认开启音乐
+        self.ui.music_btn.setChecked(True)
+        self.ui.music_btn.setText("🔊 音乐开启")
 
-    # ===================== 单个音频循环播放 =====================
-    def init_audio(self):
-        self.bgm = QMediaPlayer()
-        self.bgm.setMedia(QMediaContent(QUrl.fromLocalFile("bgm.mp3")))
-        self.bgm.setVolume(60)
-        self.bgm.play()  # 启动就播放
+    def get_user_coin(self):
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute("SELECT coin FROM users WHERE username=?", (self.username,))
+        res = cur.fetchone()
+        conn.close()
+        return res[0] if res else 100
 
-    def toggle_music(self):
-        # 勾选播放，取消停止
-        if self.ui.music_btn.isChecked():
-            self.bgm.play()
+    def get_pity_count(self):
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute("SELECT count FROM pity_count WHERE username=?", (self.username,))
+        res = cur.fetchone()
+        if not res:
+            cur.execute("INSERT INTO pity_count (username, count) VALUES (?, 0)", (self.username,))
+            conn.commit()
+            res = (0,)
+        conn.close()
+        return res[0] if res else 0
+
+    def update_pity_count(self, new_count):
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute("REPLACE INTO pity_count (username, count) VALUES (?, ?)", (self.username, new_count))
+        conn.commit()
+        conn.close()
+
+    def update_user_coin(self, new_coin):
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET coin = ? WHERE username = ?", (new_coin, self.username))
+        conn.commit()
+        conn.close()
+
+    def save_gacha_record(self, card_info):
+        conn = sqlite3.connect(DB_NAME)
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO gacha_history (username, draw_time, draw_type, card_name, card_star, card_color)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            self.username,
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "单抽",
+            card_info["name"],
+            card_info["star"],
+            card_info["color"]
+        ))
+        cur.execute("""
+            INSERT OR IGNORE INTO collection (username, card_name, card_star, card_color)
+            VALUES (?, ?, ?, ?)
+        """, (self.username, card_info["name"], card_info["star"], card_info["color"]))
+        cur.execute("SELECT total_draw, ssr_count FROM gacha_stat WHERE username=?", (self.username,))
+        stat = cur.fetchone()
+        if stat:
+            total = stat[0] + 1
+            ssr = stat[1] + (1 if card_info["star"] == 5 else 0)
+            cur.execute("""
+                UPDATE gacha_stat SET total_draw = ?, ssr_count = ? WHERE username = ?
+            """, (total, ssr, self.username))
         else:
-            self.bgm.stop()
+            cur.execute("""
+                INSERT INTO gacha_stat (username, total_draw, ssr_count)
+                VALUES (?, 1, ?)
+            """, (self.username, 1 if card_info["star"] == 5 else 0))
+        conn.commit()
+        conn.close()
 
-    # ===================== 单个视频循环 =====================
+    def switch_music(self):
+        if self.music_on:
+            self.bgm_player.setVolume(0)
+            self.music_on = False
+            self.ui.music_btn.setText("🔇 音乐关闭")
+        else:
+            self.bgm_player.setVolume(40)
+            self.music_on = True
+            self.ui.music_btn.setText("🔊 音乐开启")
+
     def init_video(self):
         self.video_thread = VideoThread()
         self.video_thread.video_signal.connect(self.show_video_frame)
@@ -110,92 +299,84 @@ class card_func(QMainWindow):
     def show_video_frame(self, img):
         self.ui.center_label.setPixmap(QtGui.QPixmap.fromImage(img))
 
-    # ===================== 抽卡逻辑 =====================
-    def init_card_data(self):
-        self.Dialogue = card_show.card_show()
-        self.pic, self.count_pic = npor.read_num()
-        print(f"卡池加载完成：共{len(self.pic)}张卡，当前祈愿币：{self.count_pic}")
-        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
-        self.Dialogue.closed.connect(self.save_num)
-
-    def lack_mana(self):
-        QMessageBox.warning(self, "提示", "祈愿币不足！")
+    def _loop_bgm(self, status):
+        from PyQt5.QtMultimedia import QMediaPlayer
+        if status == QMediaPlayer.EndOfMedia:
+            self.bgm_player.setPosition(0)
+            self.bgm_player.play()
 
     def gachicard(self):
-        if self.count_pic <= 0:
-            self.lack_mana()
-            return
-        self.picdir, self.initpic = npor.gachi_card_out()
-        if not self.picdir or self.initpic == -1:
-            self.lack_mana()
+        if self.gacha_coin < 1:
+            QMessageBox.warning(self, "提示", "祈愿币不足，无法抽卡！")
             return
 
-        # 3. 更新本地祈愿币变量（同步文件）
-        _, self.count_pic = npor.read_num()
-        self.Dialogue.show()
+        current_pity = self.pity + 1
+        card_star = None
+
+        if current_pity >= PITY_GUARANTEE:
+            card_star = 5
+            current_pity = 0
+        else:
+            rand = random.random()
+            prob_sum = 0
+            for star, prob in GACHA_PROB.items():
+                prob_sum += prob
+                if rand <= prob_sum:
+                    card_star = star
+                    break
+        if card_star == 5:
+            current_pity = 0
+
+        card_list = CARD_POOL[card_star]
+        selected_card = random.choice(card_list)
+        self.picdir = selected_card["pic_path"]
+
+        self.gacha_coin -= 1
+        self.update_user_coin(self.gacha_coin)
+        self.update_pity_count(current_pity)
+        self.pity = current_pity
+
+        self.save_gacha_record(selected_card)
+        # 暂停BGM
+        self.pause_bgm()
         self.Dialogue.show_card(self.picdir)
+        self.refresh_pity_ui()
 
-    def save_num(self):
-        # 同步读取最新祈愿币
-        _, self.count_pic = npor.read_num()
-        # 更新UI显示
-        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
+    def post_gacha(self):
+        self.ui.coin_label.setText(f"✨祈愿币：{self.gacha_coin}")
 
-    def update_card(self):
-        new_mana = npor.reset_mana()
-        # 同步更新UI
-        self.count_pic = new_mana
-        self.ui.mana_label.setText(f"✨祈愿币：{self.count_pic}")
-
-    # ===================== 功能窗口 =====================
     def recordit(self):
         self.record_win = record_window()
         self.record_win.show()
-        self.record_win.print_record()
+        self.record_win.print_record(self.username)
 
     def open_stats(self):
-        self.stats_win = StatsWindow()
+        self.stats_win = StatsWindow(self.username)
         self.stats_win.show()
 
-    # ✅ 签到函数 —— 已经放进类里面了
     def open_sign_dialog(self):
-        dialog = SignDialog(self)
+        dialog = SignDialog(self.username, self)
         dialog.exec_()
+        self.gacha_coin = self.get_user_coin()
+        self.ui.coin_label.setText(f"✨祈愿币：{self.gacha_coin}")
 
-    # 新增：打开图鉴功能
     def open_collection(self):
-        from collection_window import CollectionWindow
-        if hasattr(self, 'collect') and self.collect.isVisible():
-            self.collect.refresh_collection()
-            self.collect.raise_()
-        else:
-            self.collect = CollectionWindow()
-            self.collect.show()
+        self.collect = CollectionWindow(self.username)
+        self.collect.show()
 
     # ===================== 窗口拖拽 =====================
     def mousePressEvent(self, e):
-        self.__dragWin = True
-        self.__dragWin_x = e.x()
-        self.__dragWin_y = e.y()
-        self.drag = True
-        self.x = e.x()
-        self.y = e.y()
-        self.setCursor(QCursor(Qt.OpenHandCursor))
+        if e.button() == Qt.LeftButton:
+            self.__drag = True
+            self.__drag_pos = e.globalPos() - self.frameGeometry().topLeft()
 
     def mouseMoveEvent(self, e):
-        if hasattr(self, '__dragWin') and self.__dragWin:
-            pos = e.globalPos()
-            self.move(pos.x() - self.__dragWin_x, pos.y() - self.__dragWin_y)
-        elif hasattr(self, 'drag') and self.drag:
-            self.move(e.globalPos().x() - self.x, e.globalPos().y() - self.y)
+        if self.__drag:
+            self.move(e.globalPos() - self.__drag_pos)
+            self.refresh_pity_ui()
 
-
-# ===================== 多线程 =====================
-class Update(QThread):
-    date1 = pyqtSignal()
-    def __init__(self):
-        super(Update, self).__init__()
-
+    def mouseReleaseEvent(self, e):
+        self.__drag = False
 
 # ===================== 视频线程 =====================
 class VideoThread(QThread):
@@ -216,57 +397,135 @@ class VideoThread(QThread):
             else:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
+# ===================== 广告窗口 =====================
+class AdWindow(QWidget):
+    ad_finished = pyqtSignal(bool)
 
-class Update1(QThread):
-    date2 = pyqtSignal()
-    def __init__(self):
-        super(Update1, self).__init__()
-    def run(self):
-        while True:
-            time.sleep(0.1)
-            self.date2.emit()
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setFixedSize(1000, 600)
+        self.is_ad_completed = False
+        self.countdown = 15
 
+        # 视频显示
+        self.video_label = QLabel(self)
+        self.video_label.setGeometry(0, 0, 1000, 600)
+        self.video_label.setScaledContents(True)
 
-class Update_v(QThread):
-    video2label = pyqtSignal(QtGui.QImage)
-    def __init__(self):
-        super(Update_v, self).__init__()
-    def run(self):
-        cap = cv2.VideoCapture('02.mp4')
-        while True:
-            ret = cap.grab()
-            if video_status == 1:
-                if ret:
-                    ret, frame = cap.retrieve()
-                    rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    h, w, ch = rgbImage.shape
-                    bytesPerLine = ch * w
-                    convertToQtFormat = QtGui.QImage(rgbImage.data, w, h, bytesPerLine, QtGui.QImage.Format_RGB888)
-                    if w1 & h1:
-                        convertToQtFormat = convertToQtFormat.scaled(w1, h1)
-                    cv2.waitKey(20)
-                    self.video2label.emit(convertToQtFormat)
-                else:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                    continue
-            elif video_status == 2:
-                continue
+        # 倒计时标签
+        self.count_label = QLabel(self)
+        self.count_label.setStyleSheet("""
+            QLabel {
+                color:white; 
+                font-size:26px; 
+                font-weight:bold;
+                background:rgba(0,0,0,0.8); 
+                padding:10px 22px; 
+                border-radius:10px;
+            }
+        """)
+        self.count_label.setMinimumWidth(300)
+        self.count_label.move(20, 20)
+
+        # 关闭按钮
+        self.close_btn = QPushButton("✕", self)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background:#ff4444; 
+                color:white; 
+                font-size:22px;
+                padding:8px 16px; 
+                border-radius:10px;
+            }
+            QPushButton:hover {
+                background:#ff0000;
+            }
+        """)
+        self.close_btn.clicked.connect(self.try_close)
+        self.close_btn.move(880, 20)
+
+        # 视频播放（OpenCV）
+        self.cap = cv2.VideoCapture("nibeipianle.mp4")
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 30
+        self.delay = int(1000 / self.fps)
+
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_frame)
+        self.timer.start(self.delay)
+
+        # 音频
+        self.ad_sound = QMediaPlayer()
+        self.ad_sound.setMedia(QMediaContent(QUrl.fromLocalFile("ad_audio.mp3")))
+        self.ad_sound.setVolume(80)
+        self.ad_sound.play()
+
+        # 倒计时
+        self.count_timer = QTimer()
+        self.count_timer.timeout.connect(self.update_countdown)
+        self.count_timer.start(1000)
+
+    def update_frame(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            return
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame.shape
+        q_img = QImage(frame.data, w, h, ch * w, QImage.Format_RGB888)
+        self.video_label.setPixmap(QPixmap.fromImage(q_img))
+
+    def update_countdown(self):
+        if self.countdown > 0:
+            self.count_label.setText(f"广告剩余时间：{self.countdown}s")
+            self.countdown -= 1
+        else:
+            self.is_ad_completed = True
+            self.count_label.setText(" 广告已完成 ")
+            self.count_timer.stop()
+
+    def try_close(self):
+        self.timer.stop()
+        self.count_timer.stop()
+        self.cap.release()
+        self.ad_sound.stop()
+
+        if self.is_ad_completed:
+            self.ad_finished.emit(True)
+        else:
+            res = QMessageBox.question(self, "提示", "未看完广告将无法获得奖励，确认关闭吗？")
+            if res == QMessageBox.Yes:
+                self.ad_finished.emit(False)
             else:
-                cap.release()
+                self.cap.open("nibeipianle.mp4")
+                self.timer.start(self.delay)
+                self.count_timer.start(1000)
+                self.ad_sound.play()
                 return
 
+        self.close()
 
-# ===================== 程序入口（已加入登录） =====================
+    def closeEvent(self, e):
+        self.timer.stop()
+        self.count_timer.stop()
+        self.cap.release()
+        self.ad_sound.stop()
+        e.accept()
+
+# ===================== 程序入口 =====================
 if __name__ == '__main__':
     app = QApplication(sys.argv)
 
-    # 1. 弹出登录窗口
+    # 启动动画
+    splash = SplashScreen()
+    app.exec_()
+
+    # 登录
     login = LoginWindow()
     if login.exec_() == QDialog.Accepted:
-        # 2. 登录成功，传递用户名
-        mk1 = card_func(username=login.current_user)
-        mk1.show()
+        global main_window
+        main_window = card_func(username=login.current_user)
+        main_window.show()
+
         sys.exit(app.exec_())
-    else:
-        # 3. 用户关闭登录窗口，直接退出
-        sys.exit(0)
